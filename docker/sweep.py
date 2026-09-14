@@ -49,28 +49,28 @@ def base_params(attack, args):
     return p
 
 
-# def sweeps(minimal):
-#     """Gera tuplas (attack, param, [valores]). Minimal = subconjunto barato."""
-#     if minimal:
-#         return [
-#             ("slowloris", "n_conns", [30, 60]),
-#             ("lordas", "delta", [0.005, 0.01]),
-#         ]
-#     return [
-#         # Slowloris
-#         ("slowloris", "n_conns", [15, 24, 30, 36, 60]),   # cruza capacidade=30
-#         ("slowloris", "delta",   [1.0, 3.0, 6.0, 10.0, 16.0]),  # cruza t_k=8
-#         # LoRDAS
-#         ("lordas", "t_ontime",  [0.005, 0.01, 0.02, 0.04]),
-#         ("lordas", "t_offtime", [0.01, 0.02, 0.04, 0.08]),
-#         ("lordas", "delta",     [0.002, 0.005, 0.01, 0.02]),
-#     ]
-
-
 def sweeps(minimal):
+    """Gera tuplas (attack, param, [valores]). Minimal = subconjunto barato."""
+    if minimal:
+        return [
+            ("slowloris", "n_conns", [30, 60]),
+            ("lordas", "delta", [0.005, 0.01]),
+        ]
     return [
-        ("slowloris", "n_conns", [26, 27, 28, 29]),
+        # Slowloris
+        ("slowloris", "n_conns", [15, 24, 30, 36, 60]),   # cruza capacidade=30
+        ("slowloris", "delta",   [1.0, 3.0, 6.0, 10.0, 16.0]),  # cruza t_k=8
+        # LoRDAS
+        ("lordas", "t_ontime",  [0.005, 0.01, 0.02, 0.04]),
+        ("lordas", "t_offtime", [0.01, 0.02, 0.04, 0.08]),
+        ("lordas", "delta",     [0.002, 0.005, 0.01, 0.02]),
     ]
+
+
+# def sweeps(minimal):
+#     return [
+#         ("slowloris", "n_conns", [26, 27, 28, 29]),
+#     ]
 
 def main():
     ap = argparse.ArgumentParser(description="Varredura OFAT Docker -> dataset consolidado.")
