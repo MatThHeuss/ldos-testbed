@@ -58,16 +58,23 @@ def main():
             valores_novos.add(r["scenario_value"])
             novas_linhas.append(r)
 
+    # Lê o consolidado inteiro para a memória ANTES de abrir a saída em modo "w",
+    # tornando a operação segura mesmo quando --out e --consolidated são o mesmo
+    # arquivo (o modo "w" trunca o arquivo ao abrir).
+    linhas_orig = []
+    with open(args.consolidated) as fin:
+        for r in csv.DictReader(fin):
+            linhas_orig.append(r)
+
     with open(args.out, "w", newline="") as fout:
         w = csv.DictWriter(fout, fieldnames=header)
         w.writeheader()
-        n_orig = 0
-        with open(args.consolidated) as fin:
-            for r in csv.DictReader(fin):
-                w.writerow(r)
-                n_orig += 1
+        for r in linhas_orig:
+            w.writerow(r)
         for r in novas_linhas:
             w.writerow({c: r.get(c, "") for c in header})
+
+    n_orig = len(linhas_orig)
 
     print(f"[integra] dataset final: {args.out}")
     print(f"[integra]   linhas originais: {n_orig}")

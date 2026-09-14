@@ -65,18 +65,27 @@ def main():
     n_keep = 0
     n_drop = 0
     n_shrew = 0
+
+    # Lê o consolidado inteiro para a memória ANTES de abrir a saída em modo "w".
+    # Isso torna a operação segura mesmo quando --out e --consolidated apontam para
+    # o mesmo arquivo (o modo "w" trunca o arquivo ao abrir, o que apagaria a
+    # entrada se ela ainda não tivesse sido lida).
+    linhas_mantidas = []
+    with open(args.consolidated) as fin:
+        for row in csv.DictReader(fin):
+            if row.get("scenario_attack") == "shrew":
+                n_drop += 1
+                continue
+            linhas_mantidas.append(row)
+            n_keep += 1
+
     with open(args.out, "w", newline="") as fout:
         w = csv.DictWriter(fout, fieldnames=final_header)
         w.writeheader()
 
-        # 1. copia o consolidado, descartando as linhas antigas do Shrew
-        with open(args.consolidated) as fin:
-            for row in csv.DictReader(fin):
-                if row.get("scenario_attack") == "shrew":
-                    n_drop += 1
-                    continue
-                w.writerow(row)
-                n_keep += 1
+        # 1. escreve as janelas de aplicação preservadas do consolidado
+        for row in linhas_mantidas:
+            w.writerow(row)
 
         # 2. anexa as janelas da malha nova
         for path in shrew_files:
