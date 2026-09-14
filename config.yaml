@@ -1,0 +1,75 @@
+# ============================================================================
+# Testbed LoRDAS — configuracao (loopback / uso educacional e de pesquisa)
+#
+# Maciá-Fernández, Díaz-Verdejo, García-Teodoro, "Mathematical Model for
+# Low-Rate DoS Attacks Against Application Servers", IEEE TIFS, 4(3), 2009.
+#
+# CONVENCAO: o 2o parametro das gaussianas e VARIANCIA (notacao N(mean, Var)
+# do artigo). O desvio-padrao usado nas amostras e std = sqrt(var).
+# ============================================================================
+
+defaults:
+  host: "127.0.0.1"      # SOMENTE loopback
+  port: 8080             # porta base (cada cenario da varredura usa uma porta distinta)
+
+  # ---------- servidor (vitima) ----------
+  n_workers: 4           # N_s : workers concorrentes que servem a fila
+  queue_size: 4          # posicoes totais na fila de servico (>= n_workers)
+                         # a taxa de liberacao de posicao vale ~ N_s / T_s
+  ts_mean: 0.1           # T_s medio (s). Artigo usa [1,15]s; escalado p/ rodar rapido.
+  ts_var: 0.0001         # VARIANCIA de T_s (Var).  std = sqrt(0.0001) = 0.01 s
+
+  # ---------- atacante (forma de onda LoRDAS) ----------
+  delta: 0.005           # Δ : intervalo entre mensagens na fase ativa (taxa 1/Δ)
+  t_ontime: 0.01         # duracao da fase ativa (largura do pulso)
+  t_offtime: 0.02        # duracao da fase inativa (usada como periodo apenas no
+                         #   sync_mode: "period"; ver nota abaixo)
+  sync_mode: "freerate"  # "freerate" (padrao, fiel): mira CADA instante livre
+                         #   previsto, com periodo tau = T_s/N_s. t_offtime e derivado
+                         #   (tau - t_ontime). Reproduz as tendencias da Fig. 9.
+                         # "period": periodo literal T_ef = t_ontime + t_offtime
+                         #   (util se voce quer controlar T_ef diretamente).
+  rtt_mean: 0.0          # RTT medio assumido/injetado (loopback real ~0; >0 emula WAN)
+  rtt_var: 0.0           # VARIANCIA do RTT
+  calibrate_n: 30        # requisicoes de sondagem p/ estimar T_s ~ N(mean, var)
+  use_replies: true      # reply attack messages (2o mecanismo do LoRDAS)
+  use_bursts: true       # pulsos ON-OFF preditivos (1o mecanismo)
+
+  # ---------- trafego legitimo (para medir A) ----------
+  lam: 20.0              # λ : taxa de chegada de Poisson das requisicoes legitimas (0 desativa)
+
+  # ---------- controle de execucao ----------
+  duration: 30           # segundos por cenario (aumente p/ reduzir variancia)
+  c_only: false          # true => sem trafego legitimo; mede C isolado (mais fiel a def. de C)
+  write_packet_log: true # grava CSV por-evento rotulado (dataset p/ extracao de features/ML)
+
+  # ---------- captura / dataset (features) ----------
+  window_seconds: 1.0         # tamanho da janela temporal das features
+  attack_start_delay: 5.0     # s de trafego BENIGNO antes do atacante entrar
+                              #   (gera janelas rotuladas 'benign' + 'lordas')
+  label: "lordas"             # rotulo das janelas sob ataque
+  attacker_src_ips: 1         # IPs de origem logicos do atacante (1=host unico; >1 distribui)
+  legit_src_ips: 16           # IPs de origem logicos dos clientes legitimos
+  header_overhead_bytes: 40   # overhead por pacote (emula cabecalho TCP/IP)
+
+  # ---------- infraestrutura / EDoS (proxies de docker stats/exec) ----------
+  infra_interval: 0.2         # s entre amostras de CPU/mem/workers/containers
+  autoscale_enabled: true     # auto-scaler simulado -> serie N(t)
+  autoscale_min: 1
+  autoscale_max: 10
+  autoscale_cap_per_replica: 4
+  autoscale_up: 0.8           # utilizacao p/ escalar para cima
+  autoscale_down: 0.3         # utilizacao p/ escalar para baixo
+  autoscale_cooldown: 1.0
+
+
+# ---------------------------------------------------------------------------
+# Varredura opcional. Cada chave vira uma dimensao; roda-se o produto cartesiano.
+# Comente TODO o bloco `sweep:` para rodar um unico cenario a partir de defaults.
+#
+# O exemplo abaixo reproduz o estudo de sensibilidade da Fig. 9(a) (variacao de
+# t_ontime). Tendencia esperada: t_ontime ↑  =>  C ↓ , A ↓ , O ↑.
+# Para a Fig. 9(b), varie `delta` (Δ ↑ => C ↑ , O ↓).
+# ---------------------------------------------------------------------------
+sweep:
+  t_ontime: [0.002, 0.004, 0.008, 0.016, 0.032]

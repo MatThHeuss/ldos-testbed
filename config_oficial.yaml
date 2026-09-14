@@ -1,0 +1,76 @@
+# ============================================================================
+# RODADAS OFICIAIS — LoRDAS (OFAT: um fator por vez, fiel a Fig. 9 do artigo)
+#
+# FIDELIDADE AO ARTIGO (Maciá-Fernández et al., 2009):
+#   - N_s = 8 posicoes de servico (valor do exemplo numerico da Fig. 9).
+#   - Fila de PERDA: capacidade = N_s (posicoes = threads, sem buffer de espera).
+#     Requisicao ocupa uma posicao da aceitacao ao fim do servico; cheia => recusa.
+#   - Baseline NAO saturado: lambda=20 << N_s/T_s=40 req/s => A_baseline ~ 99%.
+#   - Similaridade dinamica: T_s reduzido (0.2 s) preservando as razoes do artigo
+#     (tau=T_s/N_s=0.025 s; t_on/tau; Delta/tau; desvio/T_s; RTT/T_s).
+#   - Tres fases: benigno -> ataque -> recuperacao (mostra reversibilidade).
+#
+#   python run_experiment.py --config config_oficial.yaml --outdir oficial \
+#                            --repeats 5 --seed 12345 --plots --figdir oficial/figuras
+#
+# CONVENCAO: 2o parametro das gaussianas = VARIANCIA. sync_mode=freerate =>
+# periodo tau=T_s/N_s; nesse modo t_offtime e derivado (nao varie t_offtime).
+# ============================================================================
+
+defaults:
+  host: "127.0.0.1"
+  port: 8080
+  sweep_mode: "ofat"
+
+  # ---------- servidor: N_s do artigo, fila de perda (capacidade = N_s) ----------
+  n_workers: 8
+  queue_size: 8
+  queue_equals_workers: true    # capacidade = N_s (sem buffer separado)
+  ts_mean: 0.2                  # T_s (s). tau = T_s/N_s = 0.025 s
+  ts_var: 0.0001               # Var(T_s). desvio/T_s = 0.01/0.2 = 0.05
+
+  # ---------- ataque (parametrizado pela forma de onda; O e MEDIDO) ----------
+  delta: 0.005                 # Δ/tau = 0.20
+  t_ontime: 0.010              # t_on/tau = 0.40
+  t_offtime: 0.02              # (derivado no freerate)
+  sync_mode: "freerate"
+  rtt_mean: 0.003              # RTT/T_s = 0.015 (razao do artigo)
+  rtt_var: 0.000001
+  calibrate_n: 15
+  use_replies: true
+  use_bursts: true
+
+  # ---------- trafego legitimo (baseline NAO saturado) ----------
+  lam: 20.0                    # 20 << 40 req/s => A_baseline ~ 99%
+
+  # ---------- captura / dataset ----------
+  window_seconds: 1.0
+  attack_start_delay: 3.0       # fase BENIGNA
+  recovery_seconds: 3.0         # fase de RECUPERACAO (atacante para, legitimo segue)
+  label: "lordas"
+  attacker_src_ips: 1
+  legit_src_ips: 16
+  header_overhead_bytes: 40
+
+  # ---------- infra / EDoS ----------
+  infra_interval: 0.2
+  autoscale_enabled: true
+  autoscale_min: 1
+  autoscale_max: 8
+  autoscale_cap_per_replica: 4
+  autoscale_up: 0.7
+  autoscale_down: 0.3
+  autoscale_cooldown: 0.8
+
+  # ---------- controle (ataque curto) ----------
+  duration: 10                 # fase de ATAQUE (s)
+  c_only: false
+
+# ---------------------------------------------------------------------------
+# OFAT: varia UM parametro por vez em torno do baseline (faixas casadas ao
+# regime adimensional do artigo, tau = 0.025 s).
+# ---------------------------------------------------------------------------
+sweep:
+  delta:    [0.002, 0.005, 0.010, 0.025, 0.050]        # Fig. 9(b): Δ ↑ => C ↑ , O ↓
+  t_ontime: [0.002, 0.005, 0.010, 0.020, 0.033]        # Fig. 9(a): t_on ↑ => C ↓ , O ↑
+  ts_var:   [0.00002, 0.0001, 0.0003, 0.0006, 0.0011]  # Fig. 9(c): randomizar T_s ~ineficaz

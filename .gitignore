@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# Dados e datasets (regeneráveis pelos scripts)
+*.csv
+
+# Figuras e saídas geradas
+*.pdf
+*.png
+*.json
+
+# Diretórios de saída dos experimentos
+data/
+figuras/
+oficial/
+results/
+sweep_full/
+sweep_nc/
+shrew_grid/
+shrew_out/
+shrew_out_final/
+slow_out/
+slow_out_delta/
+
+# OS / IDE
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
