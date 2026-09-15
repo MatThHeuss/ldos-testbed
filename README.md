@@ -4,7 +4,8 @@ Implementação de três ataques **Low-Rate DoS (LDoS)** de categorias distintas
 **Slowloris** (Slow DoS), **Shrew** (ataque à camada de transporte / QoS) e
 **LoRDAS** (ataque à fila de serviço de aplicação) — acompanhada de um extrator de
 características por janela temporal comum aos três, para a construção de um dataset
-rotulado destinado ao estudo de detecção de ataques LDoS.
+rotulado de ataques LDoS, com rótulo multidimensional (tipo, intensidade, impacto e
+custo).
 
 Cada ataque possui seu próprio orquestrador, mas todos passam pelo mesmo pipeline de
 extração (`features.extract_windows(...)`), que produz, para cada janela de tempo,
@@ -59,7 +60,7 @@ pip install -r requirements.txt   # pyyaml, psutil, matplotlib
 ## Estrutura do dataset
 
 Cada linha corresponde a uma **janela temporal de 1 s** rotulada. As colunas
-agrupam-se em quatro conjuntos:
+agrupam-se em cinco conjuntos:
 
 - **Características de rede** (13): `pkt_count`, `byte_count`, `active_conns_mean`,
   `src_ip_entropy`, `src_port_entropy`, `distinct_src_ips`, `distinct_src_ports`,
@@ -70,13 +71,21 @@ agrupam-se em quatro conjuntos:
 - **Indicadores de impacto no serviço** (3): `availability_A` (taxa de sucesso das
   requisições), `rt_mean` (tempo médio de resposta), `refused_rate`. Aplicáveis aos
   ataques de aplicação.
-- **Metadados de rastreabilidade**: `label` (`benign`, `slowloris`, `shrew`,
-  `lordas`, `recovery`), `scenario_attack`, `scenario_param`, `scenario_value`,
-  `scenario_rep`, `window_start`, `window_end`.
+- **Rótulo multidimensional e dimensão econômica**: `label` (tipo:
+  `benign`, `slowloris`, `shrew`, `lordas`, `recovery`), `intensidade`
+  (*duty cycle* da configuração), `impacto` (degradação de SLA para os ataques de
+  aplicação, degradação de vazão para o Shrew), `containers_N` (número de réplicas
+  N(t) gerado pelo *auto-scaler* simulado), `custo` (custo excedente acumulado do
+  provisionamento induzido, em contêineres-segundo) e `scaling_induced`
+  (1 nas janelas de ataque em que houve escalonamento).
+- **Metadados de rastreabilidade**: `scenario_attack`, `scenario_param`,
+  `scenario_value`, `scenario_rep`, `window_start`, `window_end`.
 
-> As colunas `attacker_pkts`, `legit_pkts` e `containers_N` acompanham cada amostra
-> para fins de análise e rastreabilidade, mas **não devem ser usadas como
-> características preditoras** (ver *Uso do dataset*).
+> As colunas `attacker_pkts` e `legit_pkts` acompanham cada amostra para fins de
+> análise, mas **não devem ser usadas como características preditoras** (ver *Uso do
+> dataset*). Os metadados de rastreabilidade (`scenario_*`, `window_*`) também não são
+> preditores. As colunas de rótulo (`label`, `intensidade`, `impacto`, `custo`,
+> `scaling_induced`) são alvos de classificação/regressão, não entradas.
 
 O dataset consolidado reúne **7 212 janelas**, provenientes de **102 execuções**
 independentes (42 do Slowloris, 36 do LoRDAS e 24 do Shrew) e **50 configurações
@@ -163,14 +172,34 @@ python gera_rotulos.py \
     dataset_ldos_completo_rotulado.csv
 ```
 
-O `dataset_ldos_completo_rotulado.csv` é o dataset final, com o rótulo multidimensional
-completo. A dimensão de intensidade corresponde ao duty cycle da configuração
-(para o Slowloris, à razão entre o número de conexões e a capacidade, saturada em
-1), nula nas fases de \textit{baseline} e de recuperação. A dimensão de impacto
-corresponde à intensidade de degradação de SLA nas categorias de aplicação e à degradação
-de vazão no Shrew, também nula fora da fase de ataque.
+A dimensão de intensidade corresponde ao *duty cycle* da configuração (para o
+Slowloris, à razão entre o número de conexões e a capacidade, saturada em 1), nula nas
+fases de *baseline* e de recuperação. A dimensão de impacto corresponde à intensidade de
+degradação de SLA nas categorias de aplicação e à degradação de vazão no Shrew, também
+nula fora da fase de ataque.
 
+### 5. Dimensão econômica (EDoS)
 
+A etapa final acrescenta a dimensão econômica: a série do número de réplicas `containers_N`,
+gerada pelo *auto-scaler* simulado a partir da ocupação do *pool*, o custo excedente `custo`
+(em contêineres-segundo) e o rótulo `scaling_induced`. O script `gera_edos.py` recebe o
+dataset já rotulado e grava o dataset final com as três colunas:
+
+```bash
+python gera_edos.py \
+    dataset_ldos_completo_rotulado.csv \
+    dataset_ldos_completo_final.csv
+```
+
+A política de *auto-scaling* (limiares de utilização com *cooldown*) é definida uma única
+vez em `infra.py`, na função `gera_series_N`, e reutilizada tanto pelo `orchestrator.py`,
+que gera `containers_N` em tempo real durante a execução, quanto por este passo de
+pós-processamento, que a completa com o custo e o `scaling_induced`. O Shrew, por não ocupar
+o *pool* de atendimento, não induz escalonamento: para ele, `containers_N` = 1, `custo` = 0
+e `scaling_induced` = 0.
+
+O `dataset_ldos_completo_final.csv` é o dataset final, com o rótulo multidimensional completo
+(tipo, intensidade, impacto) e a dimensão econômica (custo).
 
 ---
 
@@ -223,10 +252,11 @@ e não integram o dataset de características.
 Ao treinar modelos sobre o dataset, recomenda-se:
 
 - **Remover as colunas de rastreabilidade e as auxiliares** (`scenario_*`,
-  `window_*`, `attacker_pkts`, `legit_pkts`, `containers_N`) do conjunto de
-  características. Em particular, `scenario_attack` é o próprio rótulo de tipo e
-  `attacker_pkts` revela diretamente a presença do atacante — usá-las como
-  características constitui vazamento de informação.
+  `window_*`, `attacker_pkts`, `legit_pkts`) do conjunto de características. Em
+  particular, `scenario_attack` é o próprio rótulo de tipo e `attacker_pkts` revela
+  diretamente a presença do atacante — usá-las como características constitui vazamento
+  de informação. As colunas de rótulo (`label`, `intensidade`, `impacto`, `custo`,
+  `scaling_induced`) são alvos, não entradas.
 - **Particionar por execução**, mantendo todas as janelas de uma mesma execução em um
   único subconjunto (treino ou teste), para evitar a superestimação de desempenho por
   correlação temporal entre janelas contíguas. Os metadados de rastreabilidade
@@ -249,13 +279,14 @@ Ao treinar modelos sobre o dataset, recomenda-se:
 | `shrew_sim.py`          | simulador do ataque **Shrew** (rajadas periódicas / dinâmica de RTO) |
 | `slowloris_attacker.py` | atacante **Slowloris** (conexões incompletas mantidas abertas)   |
 | `legit_client.py`       | tráfego legítimo Poisson (mede disponibilidade e tempo de resposta) |
-| `infra.py`              | coletor `psutil` + AutoScaler simulado                           |
+| `infra.py`              | coletor `psutil` + AutoScaler simulado (`gera_series_N`, política de escalonamento) |
 | `features.py`           | extrator das características por janela (comum aos 3 ataques)     |
 | `run_experiment.py`     | orquestrador do LoRDAS                                            |
 | `run_shrew.py` / `run_shrew_grid.py` | orquestrador do Shrew (varredura simples / malha D×T) |
 | `run_slowloris.py`      | orquestrador do Slowloris                                         |
 | `integra_shrew_grid.py` | integra a malha do Shrew ao consolidado (etapa 3 da geração) |
 | `gera_rotulos.py`       | adiciona as colunas de intensidade e impacto ao dataset (etapa 4 da geração) |
+| `gera_edos.py`          | adiciona as colunas de custo e scaling\_induced (etapa 5, dimensão econômica) |
 | `integra_slowloris_nc.py` | utilitário para acrescentar novos pontos de varredura de um ataque de aplicação a um dataset já gerado (fora do fluxo padrão) |
 | `plots.py`              | geração de figuras a partir dos CSVs das rodadas                 |
 | `docker/`               | testbed Docker (imagem, entrypoints, `orchestrator.py`, `sweep.py`, `relabel_recovery.py`) |
@@ -274,7 +305,7 @@ Se este testbed ou o dataset forem úteis em seu trabalho, por favor cite a diss
 associada:
 
 > [Matheus Alencar]. *[Gerando um dataset para ataques LDoS]*. Dissertação de Mestrado, Programa de
-> Pós-Graduação em Ciência da Computação, Universidade de Brasília, Brasília, 2026.
+> Pós-Graduação em informática, Universidade de Brasília, Brasília, 2026.
 
 <!-- Atualize o título e, se necessário, o ano após o depósito da versão final da
      dissertação. Se o repositório institucional atribuir um identificador (por

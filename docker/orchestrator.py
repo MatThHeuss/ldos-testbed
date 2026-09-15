@@ -34,6 +34,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # modulos do projeto (o orquestrador roda no host, na raiz do projeto)
 from features import FEATURE_ORDER, extract_windows
 from capture import PktRecord
+from infra import gera_series_N
 
 IMAGE = "ldos-testbed"
 NET = "ldos-net"
@@ -233,9 +234,15 @@ def run_scenario(p):
             occ_events.append((float(r["t"]), int(r["occupied"])))
     occ_events.sort()
 
-    # (t, cpu_pct, mem_mib, httpd_procs=ocupacao real, containers)
-    infra_samples = [(t, cpu, mib, occ_at(occ_events, t), 1)
-                     for (t, cpu, mib, pids) in samples]
+    # ocupacao do pool alinhada a cada amostra de docker stats
+    occ_por_amostra = [(t, occ_at(occ_events, t)) for (t, cpu, mib, pids) in samples]
+    # auto-scaler simulado -> serie N(t) (numero de replicas), base do EDoS.
+    # capacidade por replica = capacidade do servidor deste ataque.
+    N_series = gera_series_N(occ_por_amostra, capacity=p["capacity"])
+
+    # (t, cpu_pct, mem_mib, httpd_procs=ocupacao real, containers=N(t))
+    infra_samples = [(t, cpu, mib, occ_at(occ_events, t), N_series[i])
+                     for i, (t, cpu, mib, pids) in enumerate(samples)]
 
     # grava a serie de infra (para inspecao)
     with open(os.path.join(outdir, "infra_series.csv"), "w", newline="") as f:

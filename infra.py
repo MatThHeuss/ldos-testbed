@@ -52,6 +52,24 @@ class AutoScaler:
         return self.replicas
 
 
+def gera_series_N(occ_samples, capacity, scale_up=0.8, scale_down=0.3,
+                  cooldown_s=1.0, min_replicas=1, max_replicas=10):
+    """Aplica o auto-scaler simulado sobre uma serie de ocupacao, gerando N(t).
+
+    Fonte unica da politica de auto-scaling, reutilizada tanto pelo orquestrador
+    (geracao em tempo real durante o experimento) quanto pelo pos-processamento
+    (calculo do custo/scaling sobre um dataset ja gerado), garantindo N(t) identico.
+
+    capacity: capacidade do servidor (= capacidade por replica; cada replica
+    corresponde a um servidor identico ao do testbed).
+    occ_samples: lista de (t, ocupacao). Retorna lista de N (int) alinhada a ela.
+    """
+    asc = AutoScaler(enabled=True, min_replicas=min_replicas, max_replicas=max_replicas,
+                     capacity_per_replica=capacity, scale_up_util=scale_up,
+                     scale_down_util=scale_down, cooldown_s=cooldown_s)
+    return [asc.step(occ, t) for (t, occ) in occ_samples]
+
+
 class InfraCollector:
     """Thread que amostra CPU/MEM/workers/replicas a cada `interval` segundos."""
     def __init__(self, load_fn, interval=0.2, autoscaler=None):
