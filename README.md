@@ -139,13 +139,37 @@ python integra_shrew_grid.py \
     --out dataset_ldos_completo.csv
 ```
 
-O arquivo `dataset_ldos_completo.csv` resultante é o dataset final, com as três
-categorias e as três fases de cada execução.
+O arquivo `dataset_ldos_completo.csv` resultante reúne as três categorias e as três
+fases de cada execução, com o rótulo de tipo de ataque (coluna `label`). As demais
+dimensões do rótulo são adicionadas na etapa seguinte.
 
 > **Rotulagem por fase.** Os scripts de varredura já produzem as janelas com o rótulo
 > de fase correto (incluindo `recovery`). O `docker/relabel_recovery.py` existe para
 > reprocessar a rotulagem de recuperação em datasets gerados antes dessa correção, e
 > **não é necessário** no fluxo acima.
+
+### 4. Rotulagem multidimensional
+
+A etapa final acrescenta ao dataset as dimensões de **intensidade** e de **impacto** do
+rótulo, além do tipo de ataque já presente. O script `gera_rotulos.py` recebe o dataset
+consolidado e o `results_shrew.csv` da simulação (necessário porque o impacto do Shrew
+deriva da degradação de vazão registrada ali) e grava o dataset final com as duas colunas
+adicionais:
+
+```bash
+python gera_rotulos.py \
+    dataset_ldos_completo.csv \
+    shrew_grid/results_shrew.csv \
+    dataset_ldos_completo_rotulado.csv
+```
+
+O `dataset_ldos_completo_rotulado.csv` é o dataset final, com o rótulo multidimensional
+completo. A dimensão de intensidade corresponde ao duty cycle da configuração
+(para o Slowloris, à razão entre o número de conexões e a capacidade, saturada em
+1), nula nas fases de \textit{baseline} e de recuperação. A dimensão de impacto
+corresponde à intensidade de degradação de SLA nas categorias de aplicação e à degradação
+de vazão no Shrew, também nula fora da fase de ataque.
+
 
 
 ---
@@ -231,7 +255,8 @@ Ao treinar modelos sobre o dataset, recomenda-se:
 | `run_shrew.py` / `run_shrew_grid.py` | orquestrador do Shrew (varredura simples / malha D×T) |
 | `run_slowloris.py`      | orquestrador do Slowloris                                         |
 | `integra_shrew_grid.py` | integra a malha do Shrew ao consolidado (etapa 3 da geração) |
-| `integra_slowloris_nc.py` | utilitário para acrescentar novos pontos de varredura de um ataque de aplicação a um dataset já gerado (não faz parte do fluxo padrão) |
+| `gera_rotulos.py`       | adiciona as colunas de intensidade e impacto ao dataset (etapa 4 da geração) |
+| `integra_slowloris_nc.py` | utilitário para acrescentar novos pontos de varredura de um ataque de aplicação a um dataset já gerado (fora do fluxo padrão) |
 | `plots.py`              | geração de figuras a partir dos CSVs das rodadas                 |
 | `docker/`               | testbed Docker (imagem, entrypoints, `orchestrator.py`, `sweep.py`, `relabel_recovery.py`) |
 
@@ -248,6 +273,9 @@ desde que mantido o aviso de copyright.
 Se este testbed ou o dataset forem úteis em seu trabalho, por favor cite a dissertação
 associada:
 
-> [Matheus Alencar]. *[Título da dissertação]*. Dissertação de Mestrado, Programa de
-> Pós-Graduação em informática, Universidade de Brasília, Brasília, 2026.
+> [Matheus Alencar]. *[Gerando um dataset para ataques LDoS]*. Dissertação de Mestrado, Programa de
+> Pós-Graduação em Ciência da Computação, Universidade de Brasília, Brasília, 2026.
 
+<!-- Atualize o título e, se necessário, o ano após o depósito da versão final da
+     dissertação. Se o repositório institucional atribuir um identificador (por
+     exemplo, um link permanente ou DOI), inclua-o na referência. -->
